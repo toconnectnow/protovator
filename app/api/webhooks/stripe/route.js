@@ -1,31 +1,31 @@
 import { NextResponse } from 'next/server';
-// import Stripe from 'stripe';
+import Stripe from 'stripe';
 import { accountingAgent } from '../../../../lib/ai/accountingAgent';
 
-// const stripe = process.env.STRIPE_SECRET_KEY
-//     ? new Stripe(process.env.STRIPE_SECRET_KEY)
-//     : null;
-const stripe = null;
+const stripe = process.env.STRIPE_SECRET_KEY
+    ? new Stripe(process.env.STRIPE_SECRET_KEY)
+    : null;
 
 // This would be your Stripe Webhook Secret
 const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
 export async function POST(request) {
-    const payload = await request.text();
-    const sig = request.headers.get('stripe-signature');
+    if (!stripe) {
+        return NextResponse.json({ error: 'Stripe not configured' }, { status: 500 });
+    }
 
+    const sig = request.headers.get('stripe-signature');
     let event;
 
     try {
-        if (!stripe || !endpointSecret) {
-            // If no real Stripe setup, just log it
-            console.log('Webhook received but Stripe/Secret not configured.');
-            return NextResponse.json({ received: true });
+        const body = await request.text();
+        // Only verify signature if we have a secret, otherwise trust for dev (NOT SAFE FOR PROD)
+        if (endpointSecret) {
+            event = stripe.webhooks.constructEvent(body, sig, endpointSecret);
+        } else {
+            event = JSON.parse(body);
         }
-
-        event = stripe.webhooks.constructEvent(payload, sig, endpointSecret);
     } catch (err) {
-        console.error(`Webhook Error: ${err.message}`);
         return NextResponse.json({ error: `Webhook Error: ${err.message}` }, { status: 400 });
     }
 
